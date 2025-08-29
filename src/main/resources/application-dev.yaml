@@ -1,0 +1,5 @@
+hmdp:
+  datasource:
+    database: hmdp
+    username: root
+    password: Aa459836904
