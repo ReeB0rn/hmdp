@@ -11,8 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
+import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
 
 /**
  * <p>
@@ -30,6 +34,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private ShopMapper shopMapper;
+
+    /**
+     * 根据店铺ID 查询店铺信息
+     * @param id
+     * @return
+     */
     @Override
     public Result queryById(Long id) {
         String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY+id);
@@ -52,7 +62,31 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
         shopJson = JSONUtil.toJsonStr(shop);
         log.info("数据库查询到店铺并写入缓存:{}",id);
-        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,shopJson);
+        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,shopJson,CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return Result.ok(shop);
+    }
+
+    /**
+     * 更新店铺信息
+     * @param shop
+     * @return
+     */
+    @Override
+    @Transactional
+    public Result update(Shop shop) {
+        Long id = shop.getId();
+        if(id == null){
+            log.info("ShopServiceImpl:update 商铺异常:{}",shop);
+            return Result.fail("更新店铺异常");
+        }
+        // 1. 更新数据库商铺信息
+        updateById(shop);
+        log.info("ShopServiceImpl:update 更新商铺信息成功{}",shop.getId());
+        log.info("ShopServiceImpl:update 更新商铺信息成功");
+        // 2. 删除Redis缓存信息
+        stringRedisTemplate.delete(CACHE_SHOP_KEY+id);
+        log.info("ShopServiceImpl:update Redis缓存信息删除成功{}",shop.getId());
+        return Result.ok();
+
     }
 }
