@@ -15,8 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.concurrent.TimeUnit;
 
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
-import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
+import static com.hmdp.utils.RedisConstants.*;
 
 /**
  * <p>
@@ -42,7 +41,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     @Override
     public Result queryById(Long id) {
-        String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY+id);
+        String keyShop = CACHE_SHOP_KEY + id;
+        String shopJson = stringRedisTemplate.opsForValue().get(keyShop);
         Shop shop;
 
         // 缓存击中 返回商铺信息
@@ -50,6 +50,11 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             log.info("商铺缓存击中:{}",id);
             shop = JSONUtil.toBean(shopJson, Shop.class);
             return Result.ok(shop);
+        }else if(shopJson != null){
+            //缓存击中空 店铺不存在
+            log.info("击中空缓存 店铺不存在:{}",id);
+            stringRedisTemplate.expire(keyShop,CACHE_SHOP_TTL, TimeUnit.MINUTES);
+            return Result.fail("店铺不存在");
         }
 
         // 缓存未击中 查询数据库
@@ -58,11 +63,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         // 店铺不存在
         if(shop == null){
             log.info("店铺数据库查询为空:{}",id);
+            stringRedisTemplate.opsForValue().set(keyShop,"",CACHE_NULL_TTL,TimeUnit.MINUTES);
             return Result.fail("店铺不存在");
         }
         shopJson = JSONUtil.toJsonStr(shop);
         log.info("数据库查询到店铺并写入缓存:{}",id);
-        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,shopJson,CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        stringRedisTemplate.opsForValue().set(keyShop,shopJson,CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return Result.ok(shop);
     }
 
@@ -82,7 +88,6 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         // 1. 更新数据库商铺信息
         updateById(shop);
         log.info("ShopServiceImpl:update 更新商铺信息成功{}",shop.getId());
-        log.info("ShopServiceImpl:update 更新商铺信息成功");
         // 2. 删除Redis缓存信息
         stringRedisTemplate.delete(CACHE_SHOP_KEY+id);
         log.info("ShopServiceImpl:update Redis缓存信息删除成功{}",shop.getId());
