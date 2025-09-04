@@ -14,6 +14,8 @@ import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +44,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private RedisIdWorker redisIdWorker;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private RedissonClient redissonClient;
 
     @Override
     public Result seckillVoucher(Long voucherId) {
@@ -77,16 +81,16 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 //            return Result.fail("更新失败");
 //        }]
         Long userId = UserHolder.getUser().getId();
-        SimpleRedisLock simpleRedisLock = new SimpleRedisLock("order"+userId,stringRedisTemplate);
-        boolean lock = simpleRedisLock.tryLock(1200);
-        if(!lock){
+        RLock lock = redissonClient.getLock("order:" + userId);
+        boolean triedLock = lock.tryLock();
+        if(!triedLock){
             return Result.fail("同时只能下一单");
         }
         try{
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(voucherId);
         }finally {
-            simpleRedisLock.unlock();
+            lock.unlock();
         }
     }
 
